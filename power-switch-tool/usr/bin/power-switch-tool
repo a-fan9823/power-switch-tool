@@ -1,0 +1,67 @@
+#!/bin/bash
+in_terminal=$([[ -t 0 ]] && echo 1 || echo 0)
+
+if ! command -v powerprofilesctl >/dev/null 2>&1; then
+    error_not_found="PST ERROR: \"powerprofilesctl\" not found! This utility cannot function without it. Please verify you have it installed!"
+    if [[ $in_terminal -eq 1 ]]; then
+        echo "${error_not_found}"
+    else
+        if command -v zenity >/dev/null 2>&1; then
+            zenity --error --text="${error_not_found}" --title="PST Error"
+        elif command -v notify-send >/dev/null 2>&1; then
+            notify-send "PST Error" "${error_not_found}"
+        elif command -v xmessage >/dev/null 2>&1; then
+            xmessage -center "${error_not_found}"
+        elif command -v kdialog >/dev/null 2>&1; then
+            kdialog --error "${error_not_found}"
+        fi
+    fi
+    exit 1
+fi
+
+mapfile -t profile_array < <(powerprofilesctl list | grep -oP '[a-zA-Z0-9\-_]+(?=:$)' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+if [[ ${#profile_array[@]} -eq 0 ]]; then
+    echo "PST ERROR: No power profiles found!"
+    exit 1
+fi
+
+current_profile=$(powerprofilesctl get)
+found_index=""
+
+for index in "${!profile_array[@]}"; do
+    if [[ "${profile_array[$index]}" == "$current_profile" ]]; then
+        found_index="$index"
+        break
+    fi
+done
+
+if [[ -z "$found_index" ]]; then
+    echo "PST ERROR: Current profile \"$current_profile\" not found in the profile list!"
+    exit 1
+fi
+
+last_index=$((${#profile_array[@]} - 1))
+set_index=$(( (found_index + 1) % ${#profile_array[@]} ))
+
+if ! powerprofilesctl set "${profile_array[$set_index]}" >/dev/null 2>&1; then
+    echo "PST ERROR: Failed to set power profile to \"${profile_array[$set_index]}\"!"
+    exit 1
+fi
+
+power_notif="Power profile set: \"${profile_array[$set_index]}\""
+
+if [[ $in_terminal -eq 1 ]]; then
+    echo "${power_notif}"
+else
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send "PST" "${power_notif}" -t 3000
+    elif command -v dunstify >/dev/null 2>&1; then
+        dunstify -t 3000 "PST" "${power_notif}"
+    elif command -v zenity >/dev/null 2>&1; then
+        (zenity --info --text="${power_notif}" --timeout=3) &
+    elif command -v xmessage >/dev/null 2>&1; then
+        (xmessage "${power_notif}" & sleep 3; kill $!) &
+    fi
+fi
+
