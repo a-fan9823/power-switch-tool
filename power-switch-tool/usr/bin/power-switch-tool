@@ -1,10 +1,54 @@
 #!/bin/bash
+
+# text colors
+RED='\033[0;91m'
+YELLOW='\033[0;93m'
+NC='\033[0m'
+
+# determine if we're running in a terminal
 in_terminal=$([[ -t 0 ]] && echo 1 || echo 0)
 
+# convert the subcommand to lowercase
+lower_sub_command="${1,,}"
+
+if [[ "$lower_sub_command" == "--t" ]]; then
+    # convert the second argument to lowercase
+    lower_arg="${2,,}"
+    # validate the second argument is a boolean
+    if [[ "$2" == "0" || "$2" == "1" || "$lower_arg" == "true" || "$lower_arg" == "false" ]]; then
+        # if the bool is in human form convert it
+        if [[ "$lower_arg" == "true" || "$lower_arg" == "false" ]]; then
+            in_terminal=$([[ "$lower_arg" == "true" ]] && echo 1 || echo 0)
+        else
+            in_terminal="$2"
+        fi
+    else
+        error_malformed="${RED}PST ERROR${NC}: ${RED}malformed argument ${NC}--t: requires true/false or 0/1"
+        if [[ $in_terminal -eq 1 ]]; then
+            echo -e "${error_malformed}"
+        else
+            if command -v zenity >/dev/null 2>&1; then
+                zenity --error --text="${error_malformed}" --title="PST Error"
+            elif command -v notify-send >/dev/null 2>&1; then
+                notify-send "PST Error" "${error_malformed}"
+            elif command -v xmessage >/dev/null 2>&1; then
+                xmessage -center "${error_malformed}"
+            elif command -v kdialog >/dev/null 2>&1; then
+                kdialog --error "${error_malformed}"
+            fi
+        fi
+        exit 1
+    fi
+elif [[ "$lower_sub_command" == "--help" ]]; then
+    echo -e "${YELLOW}Usage${NC}: $(basename "$0") [--t true|false|0|1] ..."
+    exit 0
+fi
+
+# check if powerprofilesctl is installed
 if ! command -v powerprofilesctl >/dev/null 2>&1; then
-    error_not_found="PST ERROR: \"powerprofilesctl\" not found! This utility cannot function without it. Please verify you have it installed!"
+    error_not_found="${RED}PST ERROR: \"powerprofilesctl\" not found! This utility cannot function without it. Please verify you have it installed!${NC}"
     if [[ $in_terminal -eq 1 ]]; then
-        echo "${error_not_found}"
+        echo -e "${error_not_found}"
     else
         if command -v zenity >/dev/null 2>&1; then
             zenity --error --text="${error_not_found}" --title="PST Error"
@@ -19,13 +63,28 @@ if ! command -v powerprofilesctl >/dev/null 2>&1; then
     exit 1
 fi
 
+# read power profiles into array
 mapfile -t profile_array < <(powerprofilesctl list | grep -oP '[a-zA-Z0-9\-_]+(?=:$)' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
 if [[ ${#profile_array[@]} -eq 0 ]]; then
-    echo "PST ERROR: No power profiles found!"
+    error_no_profiles="${RED}PST ERROR: No power profiles found!${NC}"
+    if [[ $in_terminal -eq 1 ]]; then
+        echo -e "${error_no_profiles}"
+    else
+        if command -v zenity >/dev/null 2>&1; then
+            zenity --error --text="${error_no_profiles}" --title="PST Error"
+        elif command -v notify-send >/dev/null 2>&1; then
+            notify-send "PST Error" "${error_no_profiles}"
+        elif command -v xmessage >/dev/null 2>&1; then
+            xmessage -center "${error_no_profiles}"
+        elif command -v kdialog >/dev/null 2>&1; then
+            kdialog --error "${error_no_profiles}"
+        fi
+    fi
     exit 1
 fi
 
+# get the current profile
 current_profile=$(powerprofilesctl get)
 found_index=""
 
@@ -37,20 +96,48 @@ for index in "${!profile_array[@]}"; do
 done
 
 if [[ -z "$found_index" ]]; then
-    echo "PST ERROR: Current profile \"$current_profile\" not found in the profile list!"
+    error_not_found="${RED}PST ERROR: Current profile \"$current_profile\" not found in the profile list!${NC}"
+    if [[ $in_terminal -eq 1 ]]; then
+        echo -e "$error_not_found"
+    else
+        if command -v zenity >/dev/null 2>&1; then
+            zenity --error --text="$error_not_found" --title="PST Error"
+        elif command -v notify-send >/dev/null 2>&1; then
+            notify-send "PST Error" "$error_not_found"
+        elif command -v xmessage >/dev/null 2>&1; then
+            xmessage -center "$error_not_found"
+        elif command -v kdialog >/dev/null 2>&1; then
+            kdialog --error "$error_not_found"
+        fi
+    fi
     exit 1
 fi
 
-last_index=$((${#profile_array[@]} - 1))
+# calculate the next profile index
 set_index=$(( (found_index + 1) % ${#profile_array[@]} ))
 
+# attempt to set the new power profile
 if ! powerprofilesctl set "${profile_array[$set_index]}" >/dev/null 2>&1; then
-    echo "PST ERROR: Failed to set power profile to \"${profile_array[$set_index]}\"!"
+    error_set_fail="${RED}PST ERROR: Failed to set power profile to \"${profile_array[$set_index]}\"!${NC}"
+    if [[ $in_terminal -eq 1 ]]; then
+        echo -e "$error_set_fail"
+    else
+        if command -v zenity >/dev/null 2>&1; then
+            zenity --error --text="$error_set_fail" --title="PST Error"
+        elif command -v notify-send >/dev/null 2>&1; then
+            notify-send "PST Error" "$error_set_fail"
+        elif command -v xmessage >/dev/null 2>&1; then
+            xmessage -center "$error_set_fail"
+        elif command -v kdialog >/dev/null 2>&1; then
+            kdialog --error "$error_set_fail"
+        fi
+    fi
     exit 1
 fi
 
 power_notif="Power profile set: \"${profile_array[$set_index]}\""
 
+# echo the set power profile to user
 if [[ $in_terminal -eq 1 ]]; then
     echo "${power_notif}"
 else
