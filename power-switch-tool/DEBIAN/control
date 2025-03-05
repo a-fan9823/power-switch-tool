@@ -1,8 +1,8 @@
 Package: power-switch-tool
-Version: 1.0.5
+Version: 1.1.2
 Architecture: all
 Maintainer: Walmart <afanfromwalmart@gmail.com>
-Installed-Size: 3
+Installed-Size: 6.9
 Depends: bash, power-profiles-daemon
 Description: A script to toggle through power profiles on your system
 
